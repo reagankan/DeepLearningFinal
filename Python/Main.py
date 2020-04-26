@@ -17,7 +17,6 @@ parser = argparse.ArgumentParser(description='Link Prediction with SEAL')
 parser.add_argument('--data-name', default='USAir', help='network name')
 parser.add_argument('--train-name', default=None, help='train name')
 parser.add_argument('--test-name', default=None, help='test name')
-parser.add_argument('--batch-size', type=int, default=50)
 parser.add_argument('--max-train-num', type=int, default=100000, 
                     help='set maximum number of train links (to fit into memory)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -34,6 +33,8 @@ parser.add_argument('--all-unknown-as-negative', action='store_true', default=Fa
                     sample a portion from them as negative training data. Otherwise,\
                     train negative and test negative data are both sampled from \
                     unknown links without overlap.')
+parser.add_argument('--epoch', type=int, default=50, 
+                    help='set maximum number of epoch')
 # model settings
 parser.add_argument('--hop', default=1, metavar='S', 
                     help='enclosing subgraph hop number, \
@@ -128,9 +129,13 @@ cmd_args.hidden = 128
 cmd_args.out_dim = 0
 cmd_args.dropout = True
 cmd_args.num_class = 2
-cmd_args.mode = 'gpu'
-cmd_args.num_epochs = 50
+if args.no_cuda:
+    cmd_args.mode = 'cpu'
+else:
+    cmd_args.mode = 'gpu'
+cmd_args.num_epochs = args.epoch
 cmd_args.learning_rate = 1e-4
+cmd_args.batch_size = 50
 cmd_args.printAUC = True
 cmd_args.feat_dim = max_n_label + 1
 cmd_args.attr_dim = 0
@@ -148,45 +153,39 @@ if cmd_args.mode == 'gpu':
 
 optimizer = optim.Adam(classifier.parameters(), lr=cmd_args.learning_rate)
 
-random.shuffle(train_graphs)
-val_num = int(0.1 * len(train_graphs))
-val_graphs = train_graphs[:val_num]
-train_graphs = train_graphs[val_num:]
-
 train_idxes = list(range(len(train_graphs)))
 best_loss = None
-best_epoch = None
+auc = [0.0, 0.001]
+n_epoch = 0
 for epoch in range(cmd_args.num_epochs):
     random.shuffle(train_idxes)
     classifier.train()
-    avg_loss = loop_dataset(train_graphs, classifier, train_idxes, optimizer=optimizer, bsize=args.batch_size)
+    avg_loss = loop_dataset(train_graphs, classifier, train_idxes, optimizer=optimizer)
     if not cmd_args.printAUC:
         avg_loss[2] = 0.0
     print('\033[92maverage training of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, avg_loss[0], avg_loss[1], avg_loss[2]))
 
     classifier.eval()
-    val_loss = loop_dataset(val_graphs, classifier, list(range(len(val_graphs))))
+    test_loss = loop_dataset(test_graphs, classifier, list(range(len(test_graphs))))
     if not cmd_args.printAUC:
-        val_loss[2] = 0.0
-    print('\033[93maverage validation of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, val_loss[0], val_loss[1], val_loss[2]))
-    if best_loss is None:
-        best_loss = val_loss
-    if val_loss[0] <= best_loss[0]:
-        best_loss = val_loss
-        best_epoch = epoch
-        test_loss = loop_dataset(test_graphs, classifier, list(range(len(test_graphs))))
-        if not cmd_args.printAUC:
-            test_loss[2] = 0.0
-        print('\033[94maverage test of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, test_loss[0], test_loss[1], test_loss[2]))
+        test_loss[2] = 0.0
+    print('\033[93maverage test of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, test_loss[0], test_loss[1], test_loss[2]))
 
-print('\033[95mFinal test performance: epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (best_epoch, test_loss[0], test_loss[1], test_loss[2]))
-        
+    auc[0] = auc[1] #previous
+    auc[1] = test_loss[2] #current
+    n_epoch = epoch
+    if(auc[0]>auc[1]): #if previous is better, stop
+        break
 
+if args.test_name == None:
+    name = args.data_name
+else:
+    name = args.test_name
 
 with open('acc_results.txt', 'a+') as f:
-    f.write(str(test_loss[1]) + '\n')
+    f.write(str(test_loss[1]) + '\thop = ' + str(args.hop) + '\tepoch = ' + str(n_epoch) + '\t' + name + '\n')
 
 if cmd_args.printAUC:
     with open('auc_results.txt', 'a+') as f:
-        f.write(str(test_loss[2]) + '\n')
+        f.write(str(auc[0]) + '\thop = ' + str(args.hop) + '\tepoch = ' + str(n_epoch) + '\t' + name + '\n')
 
