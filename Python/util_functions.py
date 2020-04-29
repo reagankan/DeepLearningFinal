@@ -189,6 +189,12 @@ def node_label(subgraph):
     labels[labels<-1e6] = 0  # set -inf labels to 0
     return labels
 
+from sklearn.manifold import SpectralEmbedding
+def generate_spectral_embeddings(A):
+    embedding = SpectralEmbedding(n_components=2)
+    A_transformed = embedding.fit_transform(A)
+    print(f"spectral embedding created.")
+    return A_transformed
     
 def generate_node2vec_embeddings(A, emd_size=128, negative_injection=False, train_neg=None):
     if negative_injection:

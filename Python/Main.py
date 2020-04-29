@@ -11,6 +11,10 @@ sys.path.append('%s/../../pytorch_DGCNN' % os.path.dirname(os.path.realpath(__fi
 from main import *
 from util_functions import *
 
+from time import perf_counter as pc
+
+
+start_time = pc()
 
 parser = argparse.ArgumentParser(description='Link Prediction with SEAL')
 # general settings
@@ -41,8 +45,10 @@ parser.add_argument('--hop', default=1, metavar='S',
                     options: 1, 2,..., "auto"')
 parser.add_argument('--max-nodes-per-hop', default=None, 
                     help='if > 0, upper bound the # nodes per hop by subsampling')
-parser.add_argument('--use-embedding', action='store_true', default=False,
+parser.add_argument('--use-node2vec-embedding', action='store_true', default=False,
                     help='whether to use node2vec node embeddings')
+parser.add_argument('--use-spectral-embedding', action='store_true', default=False,
+                    help='whether to use spectral node embeddings')
 parser.add_argument('--use-attribute', action='store_true', default=False,
                     help='whether to use node attributes')
 args = parser.parse_args()
@@ -109,8 +115,15 @@ A.eliminate_zeros()  # make sure the links are masked when using the sparse matr
 
 node_information = None
 # node_information = np.sum(A.toarray(), axis=1, keepdims=True)  # easily overfit power
-if args.use_embedding:
+if args.use_node2vec_embedding:
+    print(f"USING NODE2VEC EMBEDDING")
     embeddings = generate_node2vec_embeddings(A, 128, True, train_neg)
+    # embeddings = generate_spectral_embeddings(A)#, 128, True, train_neg)
+    node_information = embeddings
+elif args.use_spectral_embedding:
+    print(f"USING SPECTRAL EMBEDDING")
+    #embeddings = generate_node2vec_embeddings(A, 128, True, train_neg)
+    embeddings = generate_spectral_embeddings(A)#, 128, True, train_neg)
     node_information = embeddings
 if args.use_attribute and attributes is not None:
     if node_information is not None:
@@ -163,19 +176,21 @@ for epoch in range(cmd_args.num_epochs):
     avg_loss = loop_dataset(train_graphs, classifier, train_idxes, optimizer=optimizer)
     if not cmd_args.printAUC:
         avg_loss[2] = 0.0
-    print('\033[92maverage training of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, avg_loss[0], avg_loss[1], avg_loss[2]))
+    print('\033[92maverage training of epoch %d: loss %.5f acc %.5f auc %.5f ap %.5f roc %.5f\033[0m' % (epoch, avg_loss[0], avg_loss[1], avg_loss[2], avg_loss[3], avg_loss[4]))
 
     classifier.eval()
     test_loss = loop_dataset(test_graphs, classifier, list(range(len(test_graphs))))
     if not cmd_args.printAUC:
         test_loss[2] = 0.0
-    print('\033[93maverage test of epoch %d: loss %.5f acc %.5f auc %.5f\033[0m' % (epoch, test_loss[0], test_loss[1], test_loss[2]))
+    print('\033[93maverage test of epoch %d: loss %.5f acc %.5f auc %.5f ap %.5f roc %.5f\033[0m' % (epoch, test_loss[0], test_loss[1], test_loss[2], test_loss[3], test_loss[4]))
 
     auc[0] = auc[1] #previous
     auc[1] = test_loss[2] #current
     n_epoch = epoch
     if(auc[0]>auc[1]): #if previous is better, stop
         break
+
+print(f"SEAL TIME: {round(pc() - start_time, 2)}")
 
 if args.test_name == None:
     name = args.data_name
