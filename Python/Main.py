@@ -49,6 +49,8 @@ parser.add_argument('--use-node2vec-embedding', action='store_true', default=Fal
                     help='whether to use node2vec node embeddings')
 parser.add_argument('--use-spectral-embedding', action='store_true', default=False,
                     help='whether to use spectral node embeddings')
+parser.add_argument('--use-both-embedding', action='store_true', default=False,
+                    help='whether to use node2vec & spectral node embeddings')
 parser.add_argument('--use-attribute', action='store_true', default=False,
                     help='whether to use node attributes')
 args = parser.parse_args()
@@ -125,6 +127,13 @@ elif args.use_spectral_embedding:
     #embeddings = generate_node2vec_embeddings(A, 128, True, train_neg)
     embeddings = generate_spectral_embeddings(A)#, 128, True, train_neg)
     node_information = embeddings
+elif args.use_both_embedding:
+    print(f"USING NODE2VEC & SPECTRAL EMBEDDING")
+    #embeddings = generate_node2vec_embeddings(A, 128, True, train_neg)
+    node_information = generate_spectral_embeddings(A)#, 128, True, train_neg)
+    embeddings = generate_spectral_embeddings(A)#, 128, True, train_neg)
+    node_information = np.concatenate([node_information, embeddings], axis=1)
+
 if args.use_attribute and attributes is not None:
     if node_information is not None:
         node_information = np.concatenate([node_information, attributes], axis=1)
@@ -187,8 +196,8 @@ for epoch in range(cmd_args.num_epochs):
     auc[0] = auc[1] #previous
     auc[1] = test_loss[2] #current
     n_epoch = epoch
-    if(auc[0]>auc[1]): #if previous is better, stop
-        break
+    #if(auc[0]>auc[1]): #if previous is better, stop
+     #   break
 
 print(f"SEAL TIME: {round(pc() - start_time, 2)}")
 
