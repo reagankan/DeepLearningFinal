@@ -1,3 +1,9 @@
+## Note to TAs and instructors:
+
+The original repository is from Lucas Hu (https://github.com/lucashu1/link-prediction). I edited the code to adapt it to Python 3.7, and I added various new code to adapt to specifically our YouTube dataset. To generate the dataset, use the master branch and use the parse_yt_file.py file provided
+
+
+
 Link Prediction Experiments
 ============
 
